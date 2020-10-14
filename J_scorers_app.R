@@ -94,7 +94,7 @@ headerPanel(
 
     headerPanel(
         h4('Code available at: https://github.com/DomDF',
-           style = "font-family: 'Bahnschrift', cursive;
+           style = "font-family: 'Bahnschrift';
         font-size = 80%; font-weight: 100; line-height: 0.6;
         color: #000000;")
     ),
@@ -137,17 +137,17 @@ server <- function(input, output) {
         ggplot(data = J_scorers_plot())+
             geom_point(mapping = aes(x = as.integer(Season_start), y = Goals, 
                                      col = Position),
-                       alpha = 0.6, size = 5)+
+                       alpha = 0.6, size = 4)+
             scale_color_viridis_d(direction = -1)+
             ggrepel::geom_text_repel(data = label_df(), 
                                      mapping = aes(x = Season_start, y = Goals, label = label),
-                                     size = 5, family = 'Bahnschrift', 
+                                     size = 3.5, family = 'Bahnschrift', 
                                      seed = 1008,
-                                     vjust = -2, segment.alpha = 0.4)+
+                                     segment.alpha = 0.4)+
             facet_wrap(facets = ~ Competition)+
-            ggthemes::theme_base(base_size = 18, base_family = 'Bahnschrift')+
+            ggthemes::theme_base(base_size = 14, base_family = 'Bahnschrift')+
             theme(legend.position = 'top', legend.title = element_blank(),
-                  axis.text.x = element_text(angle = 90, size = 14), 
+                  axis.text.x = element_text(angle = 90, size = 10), 
                   plot.background = element_rect(colour = NA))+
             scale_x_continuous(name = 'Season start', breaks = scales::pretty_breaks())+
             labs(caption = '@Domenic_DF  |  Data from transfermarkt.com')
