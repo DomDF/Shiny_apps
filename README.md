@@ -9,6 +9,8 @@ An interactive plot of Juventu FC's top goalscorers by comeptition, each season.
 
 ### prior_pred_app.R:
 
+https://engineeringdecisionanalysis.shinyapps.io/Priors/
+
 A tool for visualising the information contained in (normally distributed) prior models on the outcome scale. 
 This is currently limited to:
  - Linear regression
