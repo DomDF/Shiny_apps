@@ -48,7 +48,7 @@ headerPanel(
 
 # Add a drop-down box to select from available GLMs
                selectInput(inputId = 'GLM',
-                           label = 'Select the generalised linear model:',
+                           label = 'Select model:',
                            choices = c('Linear regression',
                                        'Poisson regression',
                                        'Logistic regression',
