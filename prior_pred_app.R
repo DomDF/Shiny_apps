@@ -1,299 +1,566 @@
 # Read in the all required libraries
-
-library(shiny); library(shinyWidgets); library(tidyverse); library(extrafont); library(DT)
-library(DomDF)
+library(shiny)
+library(shinydashboard)
+library(shinyWidgets)
+library(tidyverse)
+library(plotly)
+library(viridis)
+library(DT)
 
 # Define UI
-
-ui <- fluidPage(
-
-    # To display LaTeX-style equations
-    withMathJax(),
-
-# Title and subtitle of the app
-
-titlePanel(
-
-    p(
-        h2('Prior predictive checks for Bayesian regression.',
-           style = "font-family: 'Bahnschrift';
-        font-size = 80%; font-weight: 100;
-        color: #000000;")
-
+ui <- dashboardPage(
+  dashboardHeader(
+    title = "prior predictive explorer",
+    titleWidth = 300
+  ),
+  
+  dashboardSidebar(
+    width = 300,
+    
+    # Model selection
+    selectInput(
+      inputId = 'model_type',
+      label = 'model type',
+      choices = c(
+        'linear regression' = 'linear',
+        'logistic regression' = 'logistic', 
+        'poisson regression' = 'poisson',
+        'gaussian process (rbf)' = 'gp'
+      ),
+      selected = 'linear'
+    ),
+    
+    # Preset configurations
+    selectInput(
+      inputId = 'preset',
+      label = 'prior presets',
+      choices = c(
+        'custom' = 'custom',
+        'weakly informative' = 'weakly',
+        'informative' = 'informative',
+        'vague' = 'vague'
+      ),
+      selected = 'custom'
+    ),
+    
+    hr(),
+    
+    # Prior parameters
+    h4("prior parameters", style = "color: #fff;"),
+    
+    fluidRow(
+      column(6,
+        numericInput(
+          inputId = 'mu_alpha',
+          label = HTML("&mu;<sub>&alpha;</sub>"),
+          value = 0,
+          step = 0.5
+        )
+      ),
+      column(6,
+        numericInput(
+          inputId = 'sigma_alpha',
+          label = HTML("&sigma;<sub>&alpha;</sub>"),
+          value = 1,
+          min = 0.01,
+          step = 0.1
+        )
+      )
+    ),
+    
+    fluidRow(
+      column(6,
+        numericInput(
+          inputId = 'mu_beta',
+          label = HTML("&mu;<sub>&beta;</sub>"),
+          value = 0,
+          step = 0.5
+        )
+      ),
+      column(6,
+        numericInput(
+          inputId = 'sigma_beta',
+          label = HTML("&sigma;<sub>&beta;</sub>"),
+          value = 1,
+          min = 0.01,
+          step = 0.1
+        )
+      )
+    ),
+    
+    hr(),
+    
+    # Simulation settings
+    h4("simulation settings", style = "color: #fff;"),
+    
+    sliderInput(
+      inputId = 'n_samples',
+      label = 'number of samples',
+      min = 10,
+      max = 500,
+      value = 50,
+      step = 10
+    ),
+    
+    sliderInput(
+      inputId = 'x_range',
+      label = 'input domain',
+      min = -20,
+      max = 20,
+      value = c(-5, 5),
+      step = 0.5
+    ),
+    
+    br(),
+    
+    # Action buttons
+    actionButton(
+      inputId = 'generate',
+      label = 'generate samples',
+      icon = icon('play'),
+      class = 'btn-primary',
+      width = '100%'
     )
-
-),
-
-# A brief description of the app, and some instructions for use
-
-headerPanel(
-    HTML(
-        paste(
-            h4('Select values for distribution parameters of priors:',
-               style = "font-family: 'Bahnschrift';
-     font-size = 80%; font-weight: 100;
-     color: #000000;"),
-            h4('(Assumed to be normally distributed in current implementation)',
-               style = "font-family: 'Bahnschrift';
-     font-size = 80%; font-weight: 100;
-     color: #000000;")
-        ))),
-
-    hr(),
-
-# Add user inputs
+  ),
+  
+  dashboardBody(
+    # Custom CSS
+    tags$head(
+      tags$style(HTML("
+        .content-wrapper, .right-side {
+          background-color: #f4f4f4;
+        }
+        .box {
+          border-top: 3px solid #3c8dbc;
+        }
+        .info-box {
+          min-height: 60px;
+        }
+        .info-box-icon {
+          height: 60px;
+          line-height: 60px;
+          font-size: 30px;
+        }
+        .info-box-content {
+          padding: 5px 10px;
+          margin-left: 60px;
+        }
+      "))
+    ),
+    
     fluidRow(
-
-        column(width = 4,
-
-# Add a drop-down box to select from available GLMs
-               selectInput(inputId = 'GLM',
-                           label = 'Select model:',
-                           choices = c('Linear regression',
-                                       'Poisson regression',
-                                       'Logistic regression',
-                                       'GP regression with exp. quad. K'),
-                           selected = 'Linear regression',
-                           multiple = FALSE,
-                           width = '600px'),
-
-# An input for the user to specify how many samples to draw from the priors
-               numericInput(inputId = 'n_samples',
-                            label = 'Number of prior predictive samples',
-                            value = 100, min = 1, max = 1000, step = 1,
-                            width = '250px')
-
-        ),
-
-# Provide values for the mean and variance of the intercept (on the linear scale)
-        column(width = 4,
-
-               numericInput(inputId = 'mu_alpha',
-                           label = 'Mean(\u03b1)',
-                           value = 0, min = -100, max = 100, step = 1,
-                           width = '250px'),
-
-               numericInput(inputId = 'sigma_alpha',
-                           label = 'Std.Dev(\u03b1)',
-                           value = 1, min = 1e-3, max = 100, step = 1/10,
-                           width = '250px')
-        ),
-
-# Provide values for the mean and variance of the slope (on the linear scale)
-        column(width = 4,
-
-               numericInput(inputId = 'mu_beta',
-                           label = 'Mean(\u03b2)',
-                           value = 0, min = -100, max = 100, step = 1,
-                           width = '250px'),
-
-               numericInput(inputId = 'sigma_beta',
-                           label = 'Std.Dev(\u03b2)',
-                           value = 1, min = 1e-3, max = 100, step = 1/10,
-                           width = '250px')
-
-               )
-        ),
-
-# Present the output corresponding to the equation representation of the model (see 'selection')
-    uiOutput(outputId = 'selection'),
-
-    hr(),
-
-# Define the range of inputs to be considered
-    fluidRow(column(10,
-
-        sliderInput(inputId = 'x_range',
-                    label = 'Select domain range for predictions:',
-                    min = -20,
-                    max = 20,
-                    value = c(0, 10), sep = '',
-                    width = '600px')
-        )
-
+      # Model equation display
+      box(
+        title = "model specification",
+        width = 12,
+        status = "primary",
+        solidHeader = FALSE,
+        uiOutput("model_equation")
+      )
     ),
-
-# A reminder for the user to check if the model predictions are sensible and not contrary to any available information
-    headerPanel(
-        h4('Now, do these look reasonable?',
-           style = "font-family: 'Bahnschrift';
-            font-size = 80%; font-weight: 100; line-height: 0.6;
-            color: #000000;")
-    ),
-
-# Present the plot
-    plotOutput(outputId = 'priors_plot', height = '600px', width = 'auto'),
-
-    hr(),
-
-# Some customisation options for the plot: 'lines' or 'points', and transparency
+    
     fluidRow(
-
-        column(width = 4,
-
-               selectInput(inputId = 'plot_type',
-                           label = 'Select the type of plot:',
-                           choices = c('Points',
-                                       'Lines'),
-                           selected = 'Points',
-                           multiple = FALSE,
-                           width = '400px')
-
+      # Main visualization
+      box(
+        title = "prior predictive distribution",
+        width = 8,
+        status = "primary",
+        solidHeader = FALSE,
+        plotlyOutput("main_plot", height = "500px"),
+        br(),
+        conditionalPanel(
+          condition = "input.plot_type == 'bands'",
+          div(
+            class = "alert alert-info",
+            style = "font-size: 13px; margin-bottom: 15px;",
+            strong("credible bands: "),
+            "the shaded regions show where predictions are likely to fall under your prior:",
+            tags$ul(
+              tags$li("dark band: 50% credible interval (25th to 75th percentiles)"),
+              tags$li("light band: 90% credible interval (5th to 95th percentiles)"),
+              tags$li("black line: mean of all prior predictions")
+            )
+          )
         ),
-
-        column(width = 4,
-
-               numericInput(inputId = 'plot_alpha',
-                            label = 'Plot Opacity',
-                            value = 1/4, min = 0, max = 1, step = 1/20,
-                            width = '250px')
-
+        fluidRow(
+          column(4,
+            radioButtons(
+              inputId = 'plot_type',
+              label = 'visualization type',
+              choices = c('lines' = 'lines', 'credible bands' = 'bands'),
+              selected = 'lines',
+              inline = TRUE
+            )
+          ),
+          column(4,
+            sliderInput(
+              inputId = 'plot_alpha',
+              label = 'opacity',
+              min = 0.1,
+              max = 1,
+              value = 0.5,
+              step = 0.1
+            )
+          ),
+          column(4,
+            downloadButton(
+              outputId = 'download_plot',
+              label = 'download plot',
+              class = 'btn-sm'
+            )
+          )
         )
-
+      ),
+      
+      # Prior distributions
+      box(
+        title = "prior distributions",
+        width = 4,
+        status = "info",
+        solidHeader = FALSE,
+        plotlyOutput("prior_dist_plot", height = "500px")
+      )
     ),
-
-# Present the data as a data table
-    dataTableOutput(outputId = 'priors_table')
-
+    
+    fluidRow(
+      # Summary statistics
+      box(
+        title = "summary statistics",
+        width = 12,
+        status = "warning",
+        solidHeader = FALSE,
+        collapsible = TRUE,
+        collapsed = TRUE,
+        DTOutput("summary_table")
+      )
+    )
+  )
 )
 
 # Define server logic
-
-server <- function(input, output) {
-
-# Define the functions for each of the GLMs
-    logit_fun <- function(x, alpha, beta){
-        exp(alpha + beta * x) / (1 + exp(alpha + beta * x))
+server <- function(input, output, session) {
+  
+  # Reactive values
+  values <- reactiveValues(
+    data = NULL,
+    generated = FALSE
+  )
+  
+  # Update parameters based on preset
+  observeEvent(input$preset, {
+    if (input$preset == 'weakly') {
+      updateNumericInput(session, 'mu_alpha', value = 0)
+      updateNumericInput(session, 'sigma_alpha', value = 2.5)
+      updateNumericInput(session, 'mu_beta', value = 0)
+      updateNumericInput(session, 'sigma_beta', value = 2.5)
+    } else if (input$preset == 'informative') {
+      updateNumericInput(session, 'mu_alpha', value = 0)
+      updateNumericInput(session, 'sigma_alpha', value = 1)
+      updateNumericInput(session, 'mu_beta', value = 0)
+      updateNumericInput(session, 'sigma_beta', value = 1)
+    } else if (input$preset == 'vague') {
+      updateNumericInput(session, 'mu_alpha', value = 0)
+      updateNumericInput(session, 'sigma_alpha', value = 10)
+      updateNumericInput(session, 'mu_beta', value = 0)
+      updateNumericInput(session, 'sigma_beta', value = 10)
     }
-
-    pois_fun <- function(x, alpha, beta){
-        rpois(n = 1, lambda = exp(alpha + beta * x))
+  })
+  
+  # Model equation
+  output$model_equation <- renderUI({
+    eq <- switch(input$model_type,
+      'linear' = withMathJax("$$y = \\alpha + \\beta x + \\epsilon, \\quad \\epsilon \\sim N(0, \\sigma^2)$$"),
+      'logistic' = withMathJax("$$\\log\\left(\\frac{p}{1-p}\\right) = \\alpha + \\beta x$$"),
+      'poisson' = withMathJax("$$\\log(\\lambda) = \\alpha + \\beta x, \\quad y \\sim \\text{Poisson}(\\lambda)$$"),
+      'gp' = withMathJax("$$\\text{rbf kernel: } k(x, x') = \\alpha^2 \\exp\\left(-\\frac{(x-x')^2}{2\\beta^2}\\right)\\\\\\text{showing: } k(x, 0)$$")
+    )
+    
+    tagList(
+      eq,
+      br(),
+      p(
+        "prior specifications: ",
+        HTML(sprintf("&alpha; ~ N(%.1f, %.1f²), &beta; ~ N(%.1f, %.1f²)", 
+                    input$mu_alpha, input$sigma_alpha, 
+                    input$mu_beta, input$sigma_beta)),
+        style = "font-size: 14px; color: #666;"
+      )
+    )
+  })
+  
+  # Generate data when button is clicked
+  observeEvent(input$generate, {
+    set.seed(123)
+    
+    # Sample parameters from priors
+    n <- input$n_samples
+    alphas <- rnorm(n, input$mu_alpha, input$sigma_alpha)
+    betas <- rnorm(n, input$mu_beta, input$sigma_beta)
+    
+    # Generate x values
+    x_seq <- seq(input$x_range[1], input$x_range[2], length.out = 100)
+    
+    # Generate predictions based on model type
+    data_list <- list()
+    
+    for (i in 1:n) {
+      if (input$model_type == 'linear') {
+        y <- alphas[i] + betas[i] * x_seq
+      } else if (input$model_type == 'logistic') {
+        y <- 1 / (1 + exp(-(alphas[i] + betas[i] * x_seq)))
+      } else if (input$model_type == 'poisson') {
+        lambda <- exp(alphas[i] + betas[i] * x_seq)
+        # Sample from Poisson distribution for each x value
+        y <- sapply(lambda, function(l) rpois(1, lambda = min(l, 1e6)))
+      } else if (input$model_type == 'gp') {
+        # RBF kernel function k(x, 0) - covariance with origin
+        y <- alphas[i]^2 * exp(-0.5 * x_seq^2 / betas[i]^2)
+      }
+      
+      data_list[[i]] <- data.frame(
+        x = x_seq,
+        y = y,
+        sample_id = i,
+        alpha = alphas[i],
+        beta = betas[i]
+      )
     }
-
-    lin_fun <- function(x, alpha, beta){
-        alpha + beta * x
-    }
-
-    exp_quad_GP_fun <- function(x, alpha, beta){
-        alpha^2 * exp(-1 / (2 * beta^2) * (0 - x)^2)
-    }
-
-
-# Define the equations, and filter based on the selected GLM
-    output$selection <- renderUI({
-
-        if (input$GLM == 'Logistic regression') {
-
-            withMathJax(
-                helpText('$$log-odds(y) = \\alpha +\\beta \\cdot X$$'))
-
-        } else if (input$GLM == 'Poisson regression') {
-
-            withMathJax(
-                helpText('$$\\lambda_{Poisson} = exp(\\alpha +\\beta \\cdot X)$$'))
-
-        } else if (input$GLM == 'GP regression with exp. quad. K') {
-
-            withMathJax(
-                helpText('$$K = \\alpha^{2} \\cdot \\exp{ \\bigg( \\frac{-1}{2 \\cdot \\beta^{2}} \\cdot (x_{i} - x_{j})^{2} \\bigg)}$$'))
-
+    
+    values$data <- bind_rows(data_list)
+    values$generated <- TRUE
+  })
+  
+  # Main plot
+  output$main_plot <- renderPlotly({
+    req(values$generated)
+    
+    p <- plot_ly()
+    
+    if (input$plot_type == 'lines') {
+      # Plot individual lines
+      for (i in unique(values$data$sample_id)) {
+        data_i <- values$data[values$data$sample_id == i,]
+        # Use points+lines for Poisson to show discrete nature
+        if (input$model_type == 'poisson') {
+          p <- p %>% add_trace(
+            x = data_i$x,
+            y = data_i$y,
+            type = 'scatter',
+            mode = 'lines+markers',
+            opacity = input$plot_alpha,
+            line = list(color = viridis(input$n_samples)[i], width = 0.5),
+            marker = list(size = 3, color = viridis(input$n_samples)[i]),
+            showlegend = FALSE,
+            hoverinfo = 'skip'
+          )
         } else {
-
-            withMathJax(
-                helpText('$$y = \\alpha +\\beta \\cdot X$$'))
-
+          p <- p %>% add_trace(
+            x = data_i$x,
+            y = data_i$y,
+            type = 'scatter',
+            mode = 'lines',
+            opacity = input$plot_alpha,
+            line = list(color = viridis(input$n_samples)[i], width = 1),
+            showlegend = FALSE,
+            hoverinfo = 'skip'
+          )
         }
+      }
+    } else if (input$plot_type == 'bands') {
+      # Plot confidence bands
+      summary_data <- values$data %>%
+        group_by(x) %>%
+        summarise(
+          mean_y = mean(y),
+          q05 = quantile(y, 0.05),
+          q25 = quantile(y, 0.25),
+          q75 = quantile(y, 0.75),
+          q95 = quantile(y, 0.95)
+        )
+      
+      p <- p %>%
+        add_trace(
+          x = summary_data$x,
+          y = summary_data$q95,
+          type = 'scatter',
+          mode = 'lines',
+          line = list(width = 0),
+          showlegend = FALSE,
+          hoverinfo = 'skip'
+        ) %>%
+        add_trace(
+          x = summary_data$x,
+          y = summary_data$q05,
+          type = 'scatter',
+          mode = 'lines',
+          fill = 'tonexty',
+          fillcolor = rgba(viridis(1), input$plot_alpha * 0.2),
+          line = list(width = 0),
+          name = '90% credible interval',
+          legendgroup = '90CI',
+          hoverinfo = 'skip'
+        ) %>%
+        add_trace(
+          x = summary_data$x,
+          y = summary_data$q75,
+          type = 'scatter',
+          mode = 'lines',
+          line = list(width = 0),
+          showlegend = FALSE,
+          hoverinfo = 'skip'
+        ) %>%
+        add_trace(
+          x = summary_data$x,
+          y = summary_data$q25,
+          type = 'scatter',
+          mode = 'lines',
+          fill = 'tonexty',
+          fillcolor = rgba(viridis(1), input$plot_alpha * 0.4),
+          line = list(width = 0),
+          name = '50% credible interval',
+          legendgroup = '50CI',
+          hoverinfo = 'skip'
+        ) %>%
+        add_trace(
+          x = summary_data$x,
+          y = summary_data$mean_y,
+          type = 'scatter',
+          mode = 'lines',
+          line = list(color = 'black', width = 2),
+          name = 'mean prediction',
+          hovertemplate = 'x: %{x}<br>y: %{y:.3f}<extra></extra>'
+        )
+    }
+    
+    # Layout
+    y_label <- switch(input$model_type,
+      'linear' = 'y',
+      'logistic' = 'probability',
+      'poisson' = 'count',
+      'gp' = 'k(x, 0)'
+    )
+    
+    p %>% layout(
+      xaxis = list(title = 'x'),
+      yaxis = list(title = y_label),
+      hovermode = 'closest',
+      plot_bgcolor = 'white',
+      paper_bgcolor = 'white'
+    )
+  })
+  
+  # Prior distribution plot
+  output$prior_dist_plot <- renderPlotly({
+    x_alpha <- seq(input$mu_alpha - 4*input$sigma_alpha, 
+                   input$mu_alpha + 4*input$sigma_alpha, 
+                   length.out = 100)
+    y_alpha <- dnorm(x_alpha, input$mu_alpha, input$sigma_alpha)
+    
+    x_beta <- seq(input$mu_beta - 4*input$sigma_beta, 
+                  input$mu_beta + 4*input$sigma_beta, 
+                  length.out = 100)
+    y_beta <- dnorm(x_beta, input$mu_beta, input$sigma_beta)
+    
+    p1 <- plot_ly() %>%
+      add_trace(
+        x = x_alpha,
+        y = y_alpha,
+        type = 'scatter',
+        mode = 'lines',
+        fill = 'tozeroy',
+        name = 'α',
+        line = list(color = viridis(2)[1])
+      ) %>%
+      layout(
+        xaxis = list(title = 'α'),
+        yaxis = list(title = 'density'),
+        showlegend = FALSE
+      )
+    
+    p2 <- plot_ly() %>%
+      add_trace(
+        x = x_beta,
+        y = y_beta,
+        type = 'scatter',
+        mode = 'lines',
+        fill = 'tozeroy',
+        name = 'β',
+        line = list(color = viridis(2)[2])
+      ) %>%
+      layout(
+        xaxis = list(title = 'β'),
+        yaxis = list(title = 'density'),
+        showlegend = FALSE
+      )
+    
+    subplot(p1, p2, nrows = 2, shareY = TRUE) %>%
+      layout(
+        plot_bgcolor = 'white',
+        paper_bgcolor = 'white'
+      )
+  })
+  
+  # Summary table
+  output$summary_table <- renderDT({
+    req(values$generated)
+    
+    summary_stats <- values$data %>%
+      group_by(x) %>%
+      summarise(
+        mean = round(mean(y), 3),
+        sd = round(sd(y), 3),
+        `5%` = round(quantile(y, 0.05), 3),
+        `25%` = round(quantile(y, 0.25), 3),
+        `50%` = round(quantile(y, 0.50), 3),
+        `75%` = round(quantile(y, 0.75), 3),
+        `95%` = round(quantile(y, 0.95), 3)
+      ) %>%
+      filter(row_number() %% 10 == 1)  # Show every 10th point
+    
+    datatable(
+      summary_stats,
+      options = list(
+        pageLength = 10,
+        scrollX = TRUE,
+        dom = 'Bfrtip',
+        buttons = c('csv', 'excel')
+      ),
+      class = 'cell-border stripe'
+    )
+  })
+  
+  # Download handler
+  output$download_plot <- downloadHandler(
+    filename = function() {
+      paste0("prior_predictive_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      # Create static ggplot version for download
+      req(values$generated)
+      
+      p <- ggplot(values$data, aes(x = x, y = y, group = sample_id)) +
+        geom_line(alpha = input$plot_alpha, color = viridis(1)) +
+        theme_minimal() +
+        labs(x = "x", y = "y", title = "prior predictive distribution") +
+        theme(
+          plot.title = element_text(size = 16, face = "bold"),
+          axis.title = element_text(size = 12),
+          panel.grid.minor = element_blank()
+        )
+      
+      ggsave(file, p, width = 10, height = 6, dpi = 300)
+    }
+  )
+}
 
-    })
-
-# Define a reactive data frame, populated by samples from the selected model
-    set.seed(seed = 1008)
-
-    data_df <- reactive({
-
-        data.frame(alpha = rnorm(n = input$n_samples, mean = input$mu_alpha, sd = input$sigma_alpha),
-                   beta = rnorm(n = input$n_samples, mean = input$mu_beta, sd = input$sigma_beta),
-                   x = seq(from = input$x_range[1], to = input$x_range[2], length.out = input$n_samples))
-
-    })
-
-    plot_df <- reactive({
-
-        if (input$GLM == 'Logistic regression') {
-            GLM_fun <- logit_fun
-        } else if (input$GLM == 'Poisson regression') {
-            GLM_fun <- pois_fun
-        } else if (input$GLM == 'GP regression with exp. quad. K') {
-            GLM_fun <- exp_quad_GP_fun
-        } else {
-            GLM_fun <- lin_fun
-        }
-
-        y <- double()
-
-        for(i in seq(from = 1, to = nrow(data_df()), by = 1)) {
-
-            y[i] <- GLM_fun(x = data_df()$x[i],
-                            alpha = data_df()$alpha[i],
-                            beta = data_df()$beta[i])
-
-        }
-
-        data_df() %>%
-            mutate(y = y)
-
-    })
-
-# The data frame is converted to a data table for aesthetic reasons
-    output$priors_table <- renderDataTable({
-
-        datatable(plot_df())
-
-    })
-
-# Define the ggplot, based on the reactive data frame
-    output$priors_plot <- renderPlot({
-
-        if (input$GLM == 'Logistic regression') {
-            GLM_fun <- logit_fun
-        } else if (input$GLM == 'Poisson regression') {
-            GLM_fun <- pois_fun
-        } else if (input$GLM == 'GP regression with exp. quad. K') {
-            GLM_fun <- exp_quad_GP_fun
-        } else {
-            GLM_fun <- lin_fun
-        }
-
-# Define the base version of the plot
-        p <- ggplot(data = plot_df())+
-            scale_x_continuous(name = 'Input', limits = c(input$x_range[1], input$x_range[2]))+
-            labs(x = 'Input', y = 'Outcome scale')+
-            DomDF::theme_ddf_light(base_size = 14)
-
-# Add samples as points, for the 'points' type plot
-        if (input$plot_type == 'Points') {
-
-            p +
-                geom_point(mapping = aes(x = x, y = y),
-                           alpha = input$plot_alpha, size = 4)
-
-        } else if (input$plot_type == 'Lines'){
-
-# Add the samples as functions, for the 'lines' type plot
-# Note: perhaps this can be optimised as it can take a while to run for large numbers of samples
-            for(i in seq(from = 1, to = input$n_samples, length.out = input$n_samples)){
-
-                p <- p +
-                    stat_function(geom = 'line', fun = GLM_fun, alpha = input$plot_alpha,
-                                  args = list(alpha = plot_df()$alpha[i], beta = plot_df()$beta[i]))
-
-            }
-
-            p
-
-        }
-
-    })
+# Helper function for rgba colors
+rgba <- function(color, alpha) {
+  rgb_vals <- col2rgb(color) / 255
+  sprintf("rgba(%d, %d, %d, %.2f)", 
+          rgb_vals[1] * 255, 
+          rgb_vals[2] * 255, 
+          rgb_vals[3] * 255, 
+          alpha)
 }
 
 # Run the application
