@@ -570,17 +570,22 @@ server <- function(input, output, session) {
           )
         
         p <- ggplot(summary_data, aes(x = x)) +
-          geom_ribbon(aes(ymin = q05, ymax = q95), 
-                     fill = viridis(1), alpha = input$plot_alpha * 0.2) +
-          geom_ribbon(aes(ymin = q25, ymax = q75), 
-                     fill = viridis(1), alpha = input$plot_alpha * 0.4) +
-          geom_line(aes(y = mean_y), color = "black", size = 1) +
+          geom_ribbon(aes(ymin = q05, ymax = q95, fill = "90% credible interval"), 
+                     alpha = input$plot_alpha * 0.2) +
+          geom_ribbon(aes(ymin = q25, ymax = q75, fill = "50% credible interval"), 
+                     alpha = input$plot_alpha * 0.4) +
+          geom_line(aes(y = mean_y, color = "mean prediction"), size = 1) +
+          scale_fill_manual(values = c("90% credible interval" = viridis(1), 
+                                      "50% credible interval" = viridis(1))) +
+          scale_color_manual(values = c("mean prediction" = "black")) +
           theme_minimal() +
-          labs(x = "x", y = y_label, title = "prior predictive distribution (credible bands)") +
+          labs(x = "x", y = y_label, title = "prior predictive distribution (credible bands)",
+               fill = "Credible Intervals", color = "Mean") +
           theme(
             plot.title = element_text(size = 16, face = "bold"),
             axis.title = element_text(size = 12),
-            panel.grid.minor = element_blank()
+            panel.grid.minor = element_blank(),
+            legend.position = "bottom"
           )
       }
       
