@@ -532,21 +532,57 @@ server <- function(input, output, session) {
   # Download handler
   output$download_plot <- downloadHandler(
     filename = function() {
-      paste0("prior_predictive_", Sys.Date(), ".png")
+      paste0("prior_predictive_", input$plot_type, "_", Sys.Date(), ".png")
     },
     content = function(file) {
       # Create static ggplot version for download
       req(values$generated)
       
-      p <- ggplot(values$data, aes(x = x, y = y, group = sample_id)) +
-        geom_line(alpha = input$plot_alpha, color = viridis(1)) +
-        theme_minimal() +
-        labs(x = "x", y = "y", title = "prior predictive distribution") +
-        theme(
-          plot.title = element_text(size = 16, face = "bold"),
-          axis.title = element_text(size = 12),
-          panel.grid.minor = element_blank()
-        )
+      # Get y-axis label based on model type
+      y_label <- switch(input$model_type,
+        'linear' = 'y',
+        'logistic' = 'probability',
+        'poisson' = 'count',
+        'gp' = 'k(x, 0)'
+      )
+      
+      if (input$plot_type == 'lines') {
+        # Create lines plot
+        p <- ggplot(values$data, aes(x = x, y = y, group = sample_id)) +
+          geom_line(alpha = input$plot_alpha, color = viridis(1)) +
+          theme_minimal() +
+          labs(x = "x", y = y_label, title = "prior predictive distribution (lines)") +
+          theme(
+            plot.title = element_text(size = 16, face = "bold"),
+            axis.title = element_text(size = 12),
+            panel.grid.minor = element_blank()
+          )
+      } else {
+        # Create credible bands plot
+        summary_data <- values$data %>%
+          group_by(x) %>%
+          summarise(
+            mean_y = mean(y),
+            q05 = quantile(y, 0.05),
+            q25 = quantile(y, 0.25),
+            q75 = quantile(y, 0.75),
+            q95 = quantile(y, 0.95)
+          )
+        
+        p <- ggplot(summary_data, aes(x = x)) +
+          geom_ribbon(aes(ymin = q05, ymax = q95), 
+                     fill = viridis(1), alpha = input$plot_alpha * 0.2) +
+          geom_ribbon(aes(ymin = q25, ymax = q75), 
+                     fill = viridis(1), alpha = input$plot_alpha * 0.4) +
+          geom_line(aes(y = mean_y), color = "black", size = 1) +
+          theme_minimal() +
+          labs(x = "x", y = y_label, title = "prior predictive distribution (credible bands)") +
+          theme(
+            plot.title = element_text(size = 16, face = "bold"),
+            axis.title = element_text(size = 12),
+            panel.grid.minor = element_blank()
+          )
+      }
       
       ggsave(file, p, width = 10, height = 6, dpi = 300)
     }
